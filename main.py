@@ -70,7 +70,8 @@ if st.button("🔄 Buscar Jogos da API"):
         # Tenta temporada 2024 primeiro (mais comum para Brasileirão agora)
         url = "https://v3.football.api-sports.io/fixtures"
         headers = {'x-apisports-key': api_key}
-        params = {"league": liga_id, "season": 2024, "next": 10} 
+        params = {"league": liga_id, "season": 2026, "next": 10} 
+
         
         try:
             res = requests.get(url, headers=headers, params=params)
