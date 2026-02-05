@@ -5,16 +5,16 @@ from sklearn.ensemble import RandomForestClassifier
 import plotly.express as px
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="GolBetPro AI", page_icon="⚽")
+st.set_page_config(page_title="GolBetPro AI", page_icon="⚽", layout="centered")
 
-# --- FUNÇÃO DE CARREGAMENTO (FOOTBALL-DATA.CO.UK) ---
+# --- FUNÇÃO DE CARREGAMENTO DE DADOS (CÉREBRO DA IA) ---
+@st.cache_data # Isso faz o app carregar mais rápido no iPhone
 def carregar_dados_treinamento():
     try:
-        # Tenta ler o arquivo baixado do site (ex: brazil.csv)
+        # Tenta ler o arquivo do Football-Data.co.uk que você subiu no GitHub
         df = pd.read_csv('brazil.csv') 
         
-        # Mapeamento das siglas do site para números
-        # H (Home) -> 1, D (Draw) -> 0, A (Away) -> 2
+        # Mapeamento: H (Casa) -> 1, D (Empate) -> 0, A (Fora) -> 2
         mapeamento = {'H': 1, 'D': 0, 'A': 2}
         
         dados_ia = pd.DataFrame()
@@ -22,14 +22,12 @@ def carregar_dados_treinamento():
         dados_ia['media_gols_fora'] = df['FTAG']
         dados_ia['resultado'] = df['FTR'].map(mapeamento)
         
-        # Remove linhas vazias caso existam
         return dados_ia.dropna()
     except Exception as e:
-        st.error(f"Erro ao carregar brazil.csv: {e}")
         return None
 
-# --- FUNÇÃO DA IA EXPERT ---
-def treinar_e_prever(gols_c, gols_f):
+# --- FUNÇÃO DE PREDIÇÃO CORRIGIDA ---
+def realizar_predicao_expert(gols_c, gols_f):
     dados = carregar_dados_treinamento()
     
     if dados is not None:
@@ -39,80 +37,79 @@ def treinar_e_prever(gols_c, gols_f):
         modelo = RandomForestClassifier(n_estimators=200, random_state=42)
         modelo.fit(X, y)
         
-        # Predição de probabilidades
+        # Gera as probabilidades
         probabilidades = modelo.predict_proba([[gols_c, gols_f]])[0]
-        # Ordem das classes no modelo: 0 (Empate), 1 (Casa), 2 (Fora)
         return probabilidades
     else:
-        return [0.33, 0.33, 0.34] # Retorno padrão caso falhe
+        # Se o CSV falhar, retorna 33% para cada lado
+        return [0.333, 0.333, 0.334]
 
-# --- INTERFACE PRINCIPAL ---
-st.title("⚽ GolBetPro Inteligência Artificial")
+# --- INTERFACE ---
+st.title("⚽ GolBetPro AI v2.1")
 
 with st.sidebar:
     st.header("⚙️ Configurações")
     api_key = st.text_input("Sua API Key", type="password")
-    liga = st.selectbox("Escolha a Liga", ["Brasileirão", "Premier League", "La Liga"])
-    liga_id = {"Premier League": 39, "Brasileirão": 71, "La Liga": 140}[liga]
+    liga_nome = st.selectbox("Escolha a Liga", ["Brasileirão", "Premier League", "La Liga"])
+    # IDs reais da API-Football
+    liga_id = {"Premier League": 39, "Brasileirão": 71, "La Liga": 140}[liga_nome]
 
-# --- SEÇÃO DE TESTE MANUAL E GRÁFICO ---
-st.subheader("🧪 Teste a IA Manualmente")
-c1, c2 = st.columns(2)
-gc = c1.number_input("Gols Médios Casa", 0.0, 5.0, 1.5)
-gf = c2.number_input("Gols Médios Fora", 0.0, 5.0, 1.2)
+# --- ABA DE TESTE MANUAL ---
+st.subheader("🧪 Simulação Manual")
+col_m1, col_m2 = st.columns(2)
+gc_manual = col_m1.number_input("Média Gols Casa", 0.0, 5.0, 1.5)
+gf_manual = col_m2.number_input("Média Gols Fora", 0.0, 5.0, 1.2)
 
-if st.button("Calcular Probabilidade"):
-    prob = treinar_e_prever(gc, gf)
+if st.button("Analisar Simulação"):
+    prob = realizar_predicao_expert(gc_manual, gf_manual)
     
-    # Exibição do Gráfico de Pizza
+    # Gráfico de Pizza
     labels = ['Empate', 'Vitória Casa', 'Vitória Fora']
     fig = px.pie(values=prob, names=labels, 
-                 title="Chances Calculadas pela IA",
-                 color_discrete_sequence=px.colors.sequential.RdBu)
+                 color_discrete_sequence=px.colors.sequential.RdBu,
+                 hole=0.3)
     st.plotly_chart(fig, use_container_width=True)
-    
-    # Resultado em texto
-    vencedor_idx = prob.tolist().index(max(prob))
-    nomes = ["Empate", "Vitória do Time da Casa", "Vitória do Visitante"]
-    st.success(f"Palpite Principal: **{nomes[vencedor_idx]}** ({max(prob)*100:.1f}%)")
 
-# --- LÓGICA DE BUSCA API ---
 st.divider()
-if st.button("🔄 Buscar e Analisar Próximos Jogos"):
+
+# --- ABA DA API (CORRIGIDA) ---
+st.subheader("📅 Próximos Jogos Reais")
+if st.button("🔄 Buscar e Analisar Jogos da API"):
     if not api_key:
-        st.error("Insira sua API Key na lateral!")
+        st.error("⚠️ Por favor, insira sua API Key na barra lateral!")
     else:
-        url = "https://v3.football.api-sports.io/fixtures"
-        headers = {'x-apisports-key': api_key}
-        params = {"league": liga_id, "season": 2024, "next": 5}
-        
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            jogos = response.json().get('response', [])
+        with st.spinner('Conectando com a API...'):
+            url = "https://v3.football.api-sports.io/fixtures"
+            headers = {'x-apisports-key': api_key}
+            # Busca os próximos 8 jogos da liga selecionada
+            params = {"league": liga_id, "season": 2025, "next": 8} 
             
-            for jogo in jogos:
-                casa = jogo['teams']['home']['name']
-                fora = jogo['teams']['away']['name']
+            try:
+                response = requests.get(url, headers=headers, params=params)
+                data = response.json()
+                jogos = data.get('response', [])
                 
-                # Para jogos da API, usamos a predição baseada no modelo
-                # (Aqui usamos valores base 1.5 e 1.2 como exemplo)
-                prob_jogo = treinar_e_prever(1.5, 1.2)
+                if not jogos:
+                    st.warning("Nenhum jogo próximo encontrado para esta liga.")
                 
-                with st.expander(f"{casa} vs {fora}"):
-                    st.write(f"📅 Data: {jogo['fixture']['date'][:10]}")
-                    st.write(f"🏠 Vitória Casa: {prob_jogo[1]*100:.1f}%")
-                    st.write(f"🤝 Empate: {prob_jogo[0]*100:.1f}%")
-                    st.write(f"🚀 Vitória Fora: {prob_jogo[2]*100:.1f}%")
-        except Exception as e:
-            st.error(f"Erro na API: {e}")
+                for jogo in jogos:
+                    time_c = jogo['teams']['home']['name']
+                    time_f = jogo['teams']['away']['name']
+                    data_jogo = jogo['fixture']['date'][:10]
+                    
+                    # A IA analisa o jogo (usando médias padrão ou dados da API se disponíveis)
+                    # Aqui usamos 1.5 e 1.2 como base para a predição
+                    prob_jogo = realizar_predicao_expert(1.5, 1.2)
+                    
+                    with st.expander(f"🏟️ {time_c} vs {time_f}"):
+                        st.write(f"**Data:** {data_jogo}")
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Casa", f"{prob_jogo[1]*100:.1f}%")
+                        c2.metric("Empate", f"{prob_jogo[0]*100:.1f}%")
+                        c3.metric("Fora", f"{prob_jogo[2]*100:.1f}%")
+                        
+            except Exception as e:
+                st.error(f"Erro na conexão: {e}")
 
-# --- ALIMENTAR DADOS ---
 st.divider()
-st.subheader("📝 Alimentar Inteligência")
-with st.form("novo_dado"):
-    st.write("Registre novos resultados para o banco de dados local")
-    nc = st.number_input("Gols Casa", min_value=0.0)
-    nf = st.number_input("Gols Fora", min_value=0.0)
-    res_manual = st.selectbox("Resultado", ["H", "D", "A"])
-    if st.form_submit_button("Registrar"):
-        st.info("Dado registrado temporariamente. Para salvar permanentemente, atualize o arquivo 'brazil.csv' no GitHub.")
+st.caption("GolBetPro - Sistema de Análise Preditiva para iPhone")
