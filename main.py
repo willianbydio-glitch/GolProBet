@@ -7,22 +7,38 @@ from sklearn.ensemble import RandomForestClassifier
 st.set_page_config(page_title="GolBetPro AI", page_icon="⚽")
 
 # --- FUNÇÃO DA IA (PREDIÇÃO) ---
-def realizar_predicao(gols_c, gols_f):
-    # Criando um dataset de treino rápido (Vitória Casa=1, Empate=0, Vitória Fora=2)
-    # Aqui a IA aprende que muitos gols em casa = vitória casa, etc.
-    data = {
-        'gols_casa': [3, 0, 1, 5, 1, 0, 2, 4],
-        'gols_fora': [0, 3, 1, 1, 2, 0, 2, 0],
-        'resultado': [1, 2, 0, 1, 2, 0, 0, 1]
-    }
-    df = pd.DataFrame(data)
-    
-    modelo = RandomForestClassifier(n_estimators=100)
-    modelo.fit(df[['gols_casa', 'gols_fora']], df['resultado'])
-    
-    pred = modelo.predict([[gols_c, gols_f]])
-    prob = modelo.predict_proba([[gols_c, gols_f]])
-    return pred[0], max(prob[0]) * 100
+import streamlit as st
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+import plotly.express as px # Para gráficos bonitos
+
+# --- NOVA FUNÇÃO DE IA EXPERT ---
+def treinar_e_prever(gols_c, gols_f):
+    try:
+        # Tenta carregar seu banco de dados de milhares de jogos
+        df = pd.read_csv('historico_jogos.csv')
+        X = df[['media_gols_casa', 'media_gols_fora']]
+        y = df['resultado']
+        
+        modelo = RandomForestClassifier(n_estimators=200)
+        modelo.fit(X, y)
+        
+        # Faz a previsão baseada nos dados que você inseriu
+        probabilidades = modelo.predict_proba([[gols_c, gols_f]])[0]
+        return probabilidades
+    except:
+        # Caso o arquivo ainda não exista, retorna uma probabilidade padrão
+        return [0.33, 0.33, 0.34] 
+
+# --- PARTE DO CÓDIGO QUE EXIBE O GRÁFICO ---
+st.subheader("📊 Probabilidades da IA")
+prob = treinar_e_prever(gc, gf) # gc e gf são as entradas de gols
+
+# Criando um gráfico de pizza para o seu iPhone
+labels = ['Empate', 'Vitória Casa', 'Vitória Fora']
+fig = px.pie(values=prob, names=labels, color_discrete_sequence=px.colors.sequential.RdBu)
+st.plotly_chart(fig, use_container_width=True)
+
 
 # --- INTERFACE ---
 st.title("⚽ GolBetPro Inteligência Artificial")
